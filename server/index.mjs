@@ -154,6 +154,10 @@ function extractElementId(result) {
 }
 
 function parseStep(step) {
+  if (/^\s*launch app\s*$/i.test(step)) {
+    return { kind: "launch" };
+  }
+
   const tapId = step.match(/tap .*?(?:id|resource-id)\s*['"]([^'"]+)['"]/i);
   if (tapId) return { kind: "tap", using: "id", selector: tapId[1] };
 
@@ -179,10 +183,68 @@ function parseStep(step) {
     };
   }
 
+  const tapLabel = step.match(/tap(?: on)?(?: the)?\s+(.+?)(?:\s+(?:button|tab|field))?\s*$/i);
+  if (tapLabel) return { kind: "tapLabel", label: tapLabel[1].trim() };
+
+  const typeLabel = step.match(
+    /type\s*['"]([^'"]+)['"]\s*(?:in|into)?(?:\s+the)?\s+(.+?)(?:\s+(?:field|input|textbox))?\s*$/i
+  );
+  if (typeLabel) {
+    return {
+      kind: "typeLabel",
+      value: typeLabel[1],
+      label: typeLabel[2].trim(),
+    };
+  }
+
+  const navigateTo = step.match(/navigate to\s+(.+?)\s*$/i);
+  if (navigateTo) return { kind: "tapLabel", label: navigateTo[1].trim() };
+
   const waitText = step.match(/wait .*?['"]([^'"]+)['"]/i);
   if (waitText) return { kind: "wait", text: waitText[1] };
 
+  const verifyVisible = step.match(/verify\s+(.+?)\s+(?:is\s+)?(?:visible|shown|appears?)\s*$/i);
+  if (verifyVisible) return { kind: "wait", text: verifyVisible[1].trim() };
+
   return { kind: "noop" };
+}
+
+async function findElementByLabel({ client, tools, label }) {
+  if (!tools.has("appium_find_element")) {
+    throw new Error("MCP tool `appium_find_element` is not available");
+  }
+
+  const findSchema = tools.get("appium_find_element").inputSchema;
+  const usingArg = pickArgName(findSchema, ["using", "strategy", "by"]);
+  const valueArg = pickArgName(findSchema, ["value", "selector", "locator", "query"]);
+
+  const attempts = [
+    { using: "accessibility id", value: label },
+    { using: "id", value: label.replace(/\s+/g, "_").toLowerCase() },
+    {
+      using: "xpath",
+      value:
+        `//*[contains(translate(@label,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'${label.toLowerCase()}')` +
+        ` or contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'${label.toLowerCase()}')` +
+        ` or contains(translate(@text,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'${label.toLowerCase()}')]`,
+    },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const findArgs = {
+        [usingArg || "using"]: attempt.using,
+        [valueArg || "value"]: attempt.value,
+      };
+      const found = await callTool(client, "appium_find_element", findArgs);
+      const elementId = extractElementId(found);
+      if (elementId) return elementId;
+    } catch {
+      // Try the next locator strategy.
+    }
+  }
+
+  return null;
 }
 
 async function runTestWithMcp({ platform, appId, test }) {
@@ -232,6 +294,11 @@ async function runTestWithMcp({ platform, appId, test }) {
         continue;
       }
 
+      if (step.kind === "launch") {
+        logs.push("  app already launched via session creation");
+        continue;
+      }
+
       if (step.kind === "wait") {
         if (!tools.has("appium_get_source")) {
           throw new Error("MCP tool `appium_get_source` is not available");
@@ -245,23 +312,31 @@ async function runTestWithMcp({ platform, appId, test }) {
         continue;
       }
 
-      if (!tools.has("appium_find_element")) {
-        throw new Error("MCP tool `appium_find_element` is not available");
+      let elementId = null;
+      if (step.kind === "tapLabel" || step.kind === "typeLabel") {
+        elementId = await findElementByLabel({ client, tools, label: step.label });
+      } else {
+        if (!tools.has("appium_find_element")) {
+          throw new Error("MCP tool `appium_find_element` is not available");
+        }
+        const findSchema = tools.get("appium_find_element").inputSchema;
+        const usingArg = pickArgName(findSchema, ["using", "strategy", "by"]);
+        const valueArg = pickArgName(findSchema, ["value", "selector", "locator", "query"]);
+        const findArgs = {};
+        findArgs[usingArg || "using"] = step.using;
+        findArgs[valueArg || "value"] = step.selector;
+        const found = await callTool(client, "appium_find_element", findArgs);
+        elementId = extractElementId(found);
       }
-
-      const findSchema = tools.get("appium_find_element").inputSchema;
-      const usingArg = pickArgName(findSchema, ["using", "strategy", "by"]);
-      const valueArg = pickArgName(findSchema, ["value", "selector", "locator", "query"]);
-      const findArgs = {};
-      findArgs[usingArg || "using"] = step.using;
-      findArgs[valueArg || "value"] = step.selector;
-      const found = await callTool(client, "appium_find_element", findArgs);
-      const elementId = extractElementId(found);
       if (!elementId) {
-        throw new Error(`Could not resolve element id for selector "${step.selector}"`);
+        throw new Error(
+          step.selector
+            ? `Could not resolve element id for selector "${step.selector}"`
+            : `Could not resolve element id for label "${step.label}"`
+        );
       }
 
-      if (step.kind === "tap") {
+      if (step.kind === "tap" || step.kind === "tapLabel") {
         if (!tools.has("appium_click")) {
           throw new Error("MCP tool `appium_click` is not available");
         }
@@ -277,7 +352,7 @@ async function runTestWithMcp({ platform, appId, test }) {
         continue;
       }
 
-      if (step.kind === "type") {
+      if (step.kind === "type" || step.kind === "typeLabel") {
         if (!tools.has("appium_type")) {
           throw new Error("MCP tool `appium_type` is not available");
         }
