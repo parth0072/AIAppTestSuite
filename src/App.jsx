@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const APPIUM_MCP_URL = "https://github.com/appium/appium-mcp";
 
@@ -603,6 +603,125 @@ function AIGenerateModal({ onGenerate, onClose, ollamaBaseUrl, ollamaModel, apiB
   );
 }
 
+function TestEditorModal({ initialTest, onSave, onClose }) {
+  const [name, setName] = useState(initialTest?.name || "");
+  const [category, setCategory] = useState(initialTest?.category || "General");
+  const [expected, setExpected] = useState(initialTest?.expected || "");
+  const [stepsText, setStepsText] = useState(
+    Array.isArray(initialTest?.steps) ? initialTest.steps.join("\n") : ""
+  );
+
+  const save = () => {
+    const steps = stepsText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!name.trim() || !category.trim() || !expected.trim() || steps.length === 0) return;
+    onSave({
+      name: name.trim(),
+      category: category.trim(),
+      expected: expected.trim(),
+      steps,
+    });
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        zIndex: 200,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          background: "#111827",
+          border: "1px solid #1f2937",
+          borderRadius: 16,
+          width: "100%",
+          maxWidth: 680,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          padding: 24,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>{initialTest ? "✏️ Edit Test Case" : "➕ New Test Case"}</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 10, marginBottom: 12 }}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Test name"
+            style={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, padding: "10px 12px", color: "#f9fafb", fontSize: 13 }}
+          />
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Category"
+            style={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, padding: "10px 12px", color: "#f9fafb", fontSize: 13 }}
+          />
+        </div>
+
+        <textarea
+          value={stepsText}
+          onChange={(e) => setStepsText(e.target.value)}
+          rows={8}
+          placeholder={"Steps (one per line)\nLaunch app\nTap on email field\nType 'user@test.com' into email field"}
+          style={{
+            width: "100%",
+            background: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: 8,
+            padding: "10px 12px",
+            color: "#f9fafb",
+            fontSize: 13,
+            boxSizing: "border-box",
+            marginBottom: 12,
+            resize: "vertical",
+            fontFamily: "monospace",
+          }}
+        />
+
+        <textarea
+          value={expected}
+          onChange={(e) => setExpected(e.target.value)}
+          rows={3}
+          placeholder="Expected result"
+          style={{
+            width: "100%",
+            background: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: 8,
+            padding: "10px 12px",
+            color: "#f9fafb",
+            fontSize: 13,
+            boxSizing: "border-box",
+            marginBottom: 14,
+            resize: "vertical",
+          }}
+        />
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onClose} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #374151", background: "none", color: "#9ca3af", cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={save} style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: "#10b981", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+            Save Test
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [tests, setTests] = useState(SAMPLE_TESTS);
   const [bugs, setBugs] = useState([]);
@@ -612,14 +731,66 @@ export default function App() {
   const [showAIModal, setShowAIModal] = useState(false);
   const [filterCat, setFilterCat] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [platform, setPlatform] = useState("iOS Simulator");
-  const [appId, setAppId] = useState("com.yourapp.bundle");
-  const [apiBaseUrl, setApiBaseUrl] = useState("http://127.0.0.1:8787");
-  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://127.0.0.1:11434");
-  const [ollamaModel, setOllamaModel] = useState("qwen2.5:3b");
+  const [platform, setPlatform] = useState(() => {
+    try {
+      return localStorage.getItem("apptest.platform") || "iOS Simulator";
+    } catch {
+      return "iOS Simulator";
+    }
+  });
+  const [appId, setAppId] = useState(() => {
+    try {
+      return localStorage.getItem("apptest.appId") || "com.yourapp.bundle";
+    } catch {
+      return "com.yourapp.bundle";
+    }
+  });
+  const [apiBaseUrl, setApiBaseUrl] = useState(() => {
+    try {
+      return localStorage.getItem("apptest.apiBaseUrl") || "http://127.0.0.1:8787";
+    } catch {
+      return "http://127.0.0.1:8787";
+    }
+  });
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState(() => {
+    try {
+      return localStorage.getItem("apptest.ollamaBaseUrl") || "http://127.0.0.1:11434";
+    } catch {
+      return "http://127.0.0.1:11434";
+    }
+  });
+  const [ollamaModel, setOllamaModel] = useState(() => {
+    try {
+      return localStorage.getItem("apptest.ollamaModel") || "qwen2.5:3b";
+    } catch {
+      return "qwen2.5:3b";
+    }
+  });
   const [infraStatus, setInfraStatus] = useState("");
   const [runningAll, setRunningAll] = useState(false);
+  const [showTestEditor, setShowTestEditor] = useState(false);
+  const [editingTestId, setEditingTestId] = useState(null);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    {
+      role: "assistant",
+      text: "Ask me: run all, run login test, run auth tests, generate tests for <feature>, check infra, or any natural request using AI+MCP.",
+    },
+  ]);
   const nextId = useRef(SAMPLE_TESTS.length + 1);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("apptest.platform", platform);
+      localStorage.setItem("apptest.appId", appId);
+      localStorage.setItem("apptest.apiBaseUrl", apiBaseUrl);
+      localStorage.setItem("apptest.ollamaBaseUrl", ollamaBaseUrl);
+      localStorage.setItem("apptest.ollamaModel", ollamaModel);
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [platform, appId, apiBaseUrl, ollamaBaseUrl, ollamaModel]);
 
   const categories = useMemo(
     () => ["All", ...new Set(tests.map((t) => t.category))],
@@ -698,6 +869,16 @@ export default function App() {
     setRunningAll(false);
   };
 
+  const runTestsByIds = async (ids) => {
+    if (!ids.length) return;
+    setRunningAll(true);
+    for (const id of ids) {
+      // eslint-disable-next-line no-await-in-loop
+      await simulateRunTest(id);
+    }
+    setRunningAll(false);
+  };
+
   const checkInfra = async () => {
     try {
       const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/health`);
@@ -712,6 +893,162 @@ export default function App() {
       );
     } catch (e) {
       setInfraStatus(`Health check failed: ${e?.message || "unknown error"}`);
+    }
+  };
+
+  const sendChatCommand = async () => {
+    const message = chatInput.trim();
+    if (!message || chatBusy) return;
+
+    setChatMessages((prev) => [...prev, { role: "user", text: message }]);
+    setChatInput("");
+    setChatBusy(true);
+
+    try {
+      const runAgentInstruction = async (instruction) => {
+        const agentRes = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/chat-agent-run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: instruction,
+            platform,
+            appId,
+            model: ollamaModel,
+            ollamaUrl: ollamaBaseUrl,
+          }),
+        });
+        const agentData = await agentRes.json();
+        if (!agentRes.ok) {
+          throw new Error(agentData?.error || "AI+MCP run failed");
+        }
+
+        const t = agentData?.test;
+        const r = agentData?.result || {};
+        const newId = nextId.current++;
+        const status = r?.passed ? STATUS.passed : STATUS.failed;
+        const newTest = {
+          id: newId,
+          name: t?.name || `AI Chat Test ${newId}`,
+          category: t?.category || "AI Chat",
+          steps: Array.isArray(t?.steps) ? t.steps : [instruction],
+          expected: t?.expected || "Action should complete successfully",
+          status,
+          logs: Array.isArray(r?.logs) ? r.logs : [],
+          duration: Number(r?.duration || 0),
+        };
+        setTests((prev) => [...prev, newTest]);
+        setActiveTab("tests");
+        setSelectedTest(newId);
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            text: `AI+MCP executed: ${newTest.name} (${status.toUpperCase()})`,
+          },
+        ]);
+      };
+
+      const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/chat-command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          tests,
+          platform,
+          model: ollamaModel,
+          ollamaUrl: ollamaBaseUrl,
+        }),
+      });
+      const data = await res.json();
+      const cmd = data?.command || { action: "help" };
+      const action = cmd.action;
+
+      if (action === "run_all") {
+        setActiveTab("tests");
+        await runTestsByIds(tests.map((t) => t.id));
+        setChatMessages((prev) => [...prev, { role: "assistant", text: "Executed all tests." }]);
+      } else if (action === "run_test") {
+        const name = String(cmd.testName || "").toLowerCase();
+        const match = tests.find((t) => t.name.toLowerCase().includes(name));
+        if (!match) {
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: `No test matched "${cmd.testName || ""}".` },
+          ]);
+        } else {
+          setActiveTab("tests");
+          setSelectedTest(match.id);
+          await runTestsByIds([match.id]);
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: `Executed test: ${match.name}` },
+          ]);
+        }
+      } else if (action === "run_category") {
+        const category = String(cmd.category || "").toLowerCase();
+        const ids = tests
+          .filter((t) => t.category.toLowerCase().includes(category))
+          .map((t) => t.id);
+        if (!ids.length) {
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: `No tests found for category "${cmd.category || ""}".` },
+          ]);
+        } else {
+          setActiveTab("tests");
+          await runTestsByIds(ids);
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: `Executed ${ids.length} tests in ${cmd.category}.` },
+          ]);
+        }
+      } else if (action === "generate_tests") {
+        const featurePrompt = String(cmd.featurePrompt || "").trim();
+        if (!featurePrompt) {
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: "Missing feature prompt for test generation." },
+          ]);
+        } else {
+          const genRes = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/generate-tests`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: featurePrompt,
+              platform,
+              model: ollamaModel,
+              ollamaUrl: ollamaBaseUrl,
+            }),
+          });
+          const genData = await genRes.json();
+          const generated = Array.isArray(genData?.tests) ? genData.tests : [];
+          if (!generated.length) {
+            setChatMessages((prev) => [
+              ...prev,
+              { role: "assistant", text: "No tests were generated." },
+            ]);
+          } else {
+            handleAIGenerate(generated, platform);
+            setActiveTab("tests");
+            setChatMessages((prev) => [
+              ...prev,
+              { role: "assistant", text: `Generated ${generated.length} test cases.` },
+            ]);
+          }
+        }
+      } else if (action === "infra_check") {
+        await checkInfra();
+        setChatMessages((prev) => [...prev, { role: "assistant", text: "Infra check completed." }]);
+      } else {
+        await runAgentInstruction(message);
+      }
+    } catch (e) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: `Chat command failed: ${e?.message || "unknown error"}` },
+      ]);
+    } finally {
+      setChatBusy(false);
     }
   };
 
@@ -741,6 +1078,38 @@ export default function App() {
 
   const closeBug = (id) =>
     setBugs((prev) => prev.map((b) => (b.id === id ? { ...b, status: "Closed" } : b)));
+
+  const openCreateTest = () => {
+    setEditingTestId(null);
+    setShowTestEditor(true);
+  };
+
+  const openEditTest = (id) => {
+    setEditingTestId(id);
+    setShowTestEditor(true);
+  };
+
+  const saveManualTest = (draft) => {
+    if (editingTestId) {
+      setTests((prev) =>
+        prev.map((t) =>
+          t.id === editingTestId
+            ? { ...t, ...draft, logs: t.logs || [], status: t.status || STATUS.idle, duration: t.duration ?? null }
+            : t
+        )
+      );
+    } else {
+      const newId = nextId.current++;
+      setTests((prev) => [
+        ...prev,
+        { id: newId, ...draft, status: STATUS.idle, logs: [], duration: null },
+      ]);
+      setSelectedTest(newId);
+      setActiveTab("tests");
+    }
+    setShowTestEditor(false);
+    setEditingTestId(null);
+  };
 
   const handleAIGenerate = (newTests, plt) => {
     const formatted = newTests
@@ -966,6 +1335,7 @@ export default function App() {
       >
         {[
           ["tests", "🧪 Test Cases"],
+          ["chat", "💬 Chat Runner"],
           ["bugs", `🐛 Bug Log (${bugs.length})`],
         ].map(([key, label]) => (
           <button
@@ -1022,6 +1392,21 @@ export default function App() {
                   }}
                 >
                   ✨ AI Generate
+                </button>
+                <button
+                  onClick={openCreateTest}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#0ea5e9",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  ➕ New Test
                 </button>
                 <button
                   onClick={runAll}
@@ -1195,6 +1580,21 @@ export default function App() {
                           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{test.name}</h2>
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            onClick={() => openEditTest(test.id)}
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: 8,
+                              border: "1px solid #374151",
+                              background: "none",
+                              color: "#9ca3af",
+                              cursor: "pointer",
+                              fontSize: 13,
+                              fontWeight: 700,
+                            }}
+                          >
+                            ✏️ Edit Test
+                          </button>
                           <button
                             onClick={() => simulateRunTest(test.id)}
                             disabled={test.status === STATUS.running}
@@ -1513,6 +1913,70 @@ export default function App() {
             )}
           </div>
         )}
+        {activeTab === "chat" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div style={{ padding: 20, borderBottom: "1px solid #1f2937" }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>💬 Chat Runner</h2>
+              <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
+                Use simple commands to control Ollama + Appium tests.
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              {chatMessages.map((m, i) => (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                    maxWidth: "75%",
+                    background: m.role === "user" ? "#6366f122" : "#111827",
+                    border: `1px solid ${m.role === "user" ? "#6366f144" : "#1f2937"}`,
+                    color: m.role === "user" ? "#c7d2fe" : "#d1d5db",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 13,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {m.text}
+                </div>
+              ))}
+            </div>
+            <div style={{ borderTop: "1px solid #1f2937", padding: 16, display: "flex", gap: 10 }}>
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") sendChatCommand();
+                }}
+                placeholder="e.g. run all, run login test, run auth tests, generate tests for playlist sharing"
+                style={{
+                  flex: 1,
+                  background: "#1f2937",
+                  border: "1px solid #374151",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  color: "#f9fafb",
+                  fontSize: 13,
+                }}
+              />
+              <button
+                onClick={sendChatCommand}
+                disabled={chatBusy || !chatInput.trim()}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: chatBusy ? "#374151" : "#10b981",
+                  color: "#fff",
+                  fontWeight: 700,
+                  cursor: chatBusy ? "not-allowed" : "pointer",
+                }}
+              >
+                {chatBusy ? "Running..." : "Send"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {bugFormTest && (
@@ -1529,6 +1993,16 @@ export default function App() {
           ollamaBaseUrl={ollamaBaseUrl}
           ollamaModel={ollamaModel}
           apiBaseUrl={apiBaseUrl}
+        />
+      )}
+      {showTestEditor && (
+        <TestEditorModal
+          initialTest={tests.find((t) => t.id === editingTestId) || null}
+          onSave={saveManualTest}
+          onClose={() => {
+            setShowTestEditor(false);
+            setEditingTestId(null);
+          }}
         />
       )}
     </div>

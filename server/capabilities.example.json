@@ -4,8 +4,8 @@
     "appium:automationName": "XCUITest",
     "appium:deviceName": "iPhone 15 Pro",
     "appium:platformVersion": "17.5",
-    "appium:udid": "REPLACE_WITH_SIMULATOR_OR_DEVICE_UDID",
-    "appium:bundleId": "com.yourapp.bundle",
+    "appium:udid": "8E5791A1-5A68-4598-9DA6-D66419517BDA",
+    "appium:bundleId": "com.coda.test",
     "appium:newCommandTimeout": 600
   },
   "android": {

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
+    "restart": "bash scripts/restart.sh",
     "server": "node server/index.mjs",
     "build": "vite build",
     "lint": "eslint .",
