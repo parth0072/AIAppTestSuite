@@ -1,0 +1,20 @@
+{
+  "ios": {
+    "platformName": "iOS",
+    "appium:automationName": "XCUITest",
+    "appium:deviceName": "iPhone 15 Pro",
+    "appium:platformVersion": "17.5",
+    "appium:udid": "REPLACE_WITH_SIMULATOR_OR_DEVICE_UDID",
+    "appium:bundleId": "com.yourapp.bundle",
+    "appium:newCommandTimeout": 600
+  },
+  "android": {
+    "platformName": "Android",
+    "appium:automationName": "UiAutomator2",
+    "appium:deviceName": "Android Emulator",
+    "appium:platformVersion": "14",
+    "appium:appPackage": "com.yourapp.package",
+    "appium:appActivity": ".MainActivity",
+    "appium:newCommandTimeout": 600
+  }
+}
