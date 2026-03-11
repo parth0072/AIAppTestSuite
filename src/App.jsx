@@ -702,8 +702,13 @@ export default function App() {
     try {
       const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/health`);
       const data = await res.json();
+      const details = [];
+      if (data?.details?.appiumMcp) details.push(`AppiumMCP detail: ${data.details.appiumMcp}`);
+      if (data?.details?.node) details.push(`Node: ${data.details.node}`);
       setInfraStatus(
-        `API:${data.api} | Ollama:${data.ollama} | AppiumMCP:${data.appiumMcp}`
+        `API:${data.api} | Ollama:${data.ollama} | AppiumMCP:${data.appiumMcp}${
+          details.length ? ` | ${details.join(" | ")}` : ""
+        }`
       );
     } catch (e) {
       setInfraStatus(`Health check failed: ${e?.message || "unknown error"}`);

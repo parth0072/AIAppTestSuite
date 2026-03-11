@@ -35,6 +35,11 @@ ollama serve
 ollama pull qwen2.5:3b
 ```
 
+Node requirement for Appium MCP:
+
+- Use `Node >= 20.19.0` (recommended `22.x`).
+- Older Node versions can fail with `ERR_REQUIRE_ESM` / `MCP error -32000: Connection closed`.
+
 ## 3. Run this project
 
 ```bash

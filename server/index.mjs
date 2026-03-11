@@ -3,7 +3,6 @@ import express from "express";
 import dotenv from "dotenv";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -17,6 +16,7 @@ const APPIUM_MCP_COMMAND =
   process.env.APPIUM_MCP_COMMAND || "./node_modules/.bin/appium-mcp";
 const APPIUM_CAPS_PATH = process.env.APPIUM_CAPS_PATH || "server/capabilities.example.json";
 const APPIUM_SERVER_URL = process.env.APPIUM_SERVER_URL || "http://127.0.0.1:4723";
+const APPIUM_MCP_MIN_NODE = "20.19.0";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +28,26 @@ app.use(express.json({ limit: "1mb" }));
 
 function normalizePlatform(platform = "") {
   return /android/i.test(platform) ? "android" : "ios";
+}
+
+function parseVersion(version) {
+  const clean = String(version || "").replace(/^v/, "");
+  const [major, minor, patch] = clean.split(".").map((n) => Number.parseInt(n || "0", 10));
+  return { major: major || 0, minor: minor || 0, patch: patch || 0 };
+}
+
+function gteVersion(actual, min) {
+  if (actual.major !== min.major) return actual.major > min.major;
+  if (actual.minor !== min.minor) return actual.minor > min.minor;
+  return actual.patch >= min.patch;
+}
+
+function isNodeCompatibleForAppiumMcp() {
+  return gteVersion(parseVersion(process.version), parseVersion(APPIUM_MCP_MIN_NODE));
+}
+
+function getNodeCompatibilityError() {
+  return `Node ${process.version} is not compatible with Appium MCP in this setup. Use Node >= ${APPIUM_MCP_MIN_NODE} (recommended: 22.x).`;
 }
 
 function parseCommand(command) {
@@ -168,6 +188,10 @@ function parseStep(step) {
 async function runTestWithMcp({ platform, appId, test }) {
   const start = Date.now();
   const logs = [];
+
+  if (!isNodeCompatibleForAppiumMcp()) {
+    throw new Error(getNodeCompatibilityError());
+  }
 
   const { client, transport, tools } = await connectMcp();
   logs.push(`Connected to Appium MCP (${tools.size} tools)`);
@@ -325,7 +349,11 @@ app.get("/api/health", async (_req, res) => {
     api: "ok",
     ollama: "down",
     appiumMcp: "down",
-    details: {},
+    details: {
+      node: process.version,
+      appiumMcpMinNode: APPIUM_MCP_MIN_NODE,
+      appiumMcpCommand: APPIUM_MCP_COMMAND,
+    },
   };
 
   try {
@@ -335,13 +363,17 @@ app.get("/api/health", async (_req, res) => {
     status.details.ollama = e.message;
   }
 
-  try {
-    const { transport, tools } = await withTimeout(connectMcp(), 4000, "Appium MCP check");
-    status.appiumMcp = "up";
-    status.details.tools = tools.size;
-    await transport.close();
-  } catch (e) {
-    status.details.appiumMcp = e.message;
+  if (!isNodeCompatibleForAppiumMcp()) {
+    status.details.appiumMcp = getNodeCompatibilityError();
+  } else {
+    try {
+      const { transport, tools } = await withTimeout(connectMcp(), 4000, "Appium MCP check");
+      status.appiumMcp = "up";
+      status.details.tools = tools.size;
+      await transport.close();
+    } catch (e) {
+      status.details.appiumMcp = e.message;
+    }
   }
 
   res.json(status);

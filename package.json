@@ -29,7 +29,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
-    "package-directory": "^0.2.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
