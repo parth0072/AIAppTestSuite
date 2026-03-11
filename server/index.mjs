@@ -250,6 +250,7 @@ async function findElementByLabel({ client, tools, label }) {
 async function runTestWithMcp({ platform, appId, test }) {
   const start = Date.now();
   const logs = [];
+  const normalizedPlatform = normalizePlatform(platform);
 
   if (!isNodeCompatibleForAppiumMcp()) {
     throw new Error(getNodeCompatibilityError());
@@ -263,9 +264,9 @@ async function runTestWithMcp({ platform, appId, test }) {
       const schema = tools.get("select_platform").inputSchema;
       const platformArg = pickArgName(schema, ["platform", "name"]);
       await callTool(client, "select_platform", {
-        [platformArg || "platform"]: normalizePlatform(platform),
+        [platformArg || "platform"]: normalizedPlatform,
       });
-      logs.push(`Platform selected: ${normalizePlatform(platform)}`);
+      logs.push(`Platform selected: ${normalizedPlatform}`);
     }
 
     if (!tools.has("create_session")) {
@@ -273,16 +274,81 @@ async function runTestWithMcp({ platform, appId, test }) {
     }
 
     const capabilities = await loadCapabilities(platform, appId);
+    const configuredUdid = capabilities["appium:udid"];
+    const resolvedAppId =
+      appId ||
+      capabilities["appium:bundleId"] ||
+      capabilities["appium:appPackage"] ||
+      null;
+
+    if (
+      normalizedPlatform === "ios" &&
+      configuredUdid &&
+      configuredUdid !== "REPLACE_WITH_SIMULATOR_OR_DEVICE_UDID" &&
+      tools.has("select_device")
+    ) {
+      const selectSchema = tools.get("select_device").inputSchema;
+      const selectPlatformArg = pickArgName(selectSchema, ["platform"]);
+      const iosTypeArg = pickArgName(selectSchema, ["iosDeviceType"]);
+      const udidArg = pickArgName(selectSchema, ["deviceUdid", "udid"]);
+      const deviceType =
+        /simulator/i.test(platform) || /simulator/i.test(String(capabilities["appium:deviceName"]))
+          ? "simulator"
+          : "real";
+      const selectArgs = {
+        [selectPlatformArg || "platform"]: "ios",
+        [iosTypeArg || "iosDeviceType"]: deviceType,
+        [udidArg || "deviceUdid"]: configuredUdid,
+      };
+      await callTool(client, "select_device", selectArgs);
+      logs.push(`Device selected: ${configuredUdid} (${deviceType})`);
+    }
+
+    if (
+      normalizedPlatform === "ios" &&
+      configuredUdid &&
+      configuredUdid !== "REPLACE_WITH_SIMULATOR_OR_DEVICE_UDID" &&
+      (/simulator/i.test(platform) ||
+        /simulator/i.test(String(capabilities["appium:deviceName"]))) &&
+      tools.has("boot_simulator")
+    ) {
+      await callTool(client, "boot_simulator", { udid: configuredUdid });
+      logs.push(`Simulator boot requested: ${configuredUdid}`);
+    }
+
+    if (
+      normalizedPlatform === "ios" &&
+      (!configuredUdid || configuredUdid === "REPLACE_WITH_SIMULATOR_OR_DEVICE_UDID")
+    ) {
+      logs.push(
+        "⚠️ Missing valid iOS UDID in capabilities. Set appium:udid in server/capabilities.example.json"
+      );
+    }
+
+    capabilities["appium:autoLaunch"] =
+      capabilities["appium:autoLaunch"] === undefined ? true : capabilities["appium:autoLaunch"];
+    capabilities["appium:forceAppLaunch"] =
+      capabilities["appium:forceAppLaunch"] === undefined
+        ? true
+        : capabilities["appium:forceAppLaunch"];
+
     const sessionSchema = tools.get("create_session").inputSchema;
     const capsArg = pickArgName(sessionSchema, ["capabilities", "desiredCapabilities"]);
     const platformArg = pickArgName(sessionSchema, ["platform", "platformName"]);
     const createArgs = {};
     if (capsArg) createArgs[capsArg] = capabilities;
-    if (platformArg) createArgs[platformArg] = normalizePlatform(platform);
+    if (platformArg) createArgs[platformArg] = normalizedPlatform;
     if (!capsArg && !platformArg) createArgs.capabilities = capabilities;
 
     await callTool(client, "create_session", createArgs);
     logs.push("Session created");
+
+    if (tools.has("appium_activate_app") && resolvedAppId) {
+      await callTool(client, "appium_activate_app", { id: resolvedAppId });
+      logs.push(`App activated: ${resolvedAppId}`);
+    } else if (!resolvedAppId) {
+      logs.push("⚠️ No app id resolved. Set Bundle/App ID in UI or capabilities config.");
+    }
 
     for (let i = 0; i < test.steps.length; i += 1) {
       const raw = test.steps[i];
